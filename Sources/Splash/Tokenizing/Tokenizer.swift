@@ -25,8 +25,8 @@ private extension Tokenizer {
         }
 
         mutating func next() -> Segment? {
-            var segment = nextSegment ?? iterator.next()
-            nextSegment = iterator.next()
+            var segment = nextSegment ?? iterator.controlledIterate(depth: 32)
+            nextSegment = iterator.controlledIterate(depth: 32)
             segment?.tokens.next = nextSegment?.tokens.current
             return segment
         }
@@ -60,6 +60,12 @@ private extension Tokenizer {
         }
 
         mutating func next() -> Segment? {
+            controlledIterate(depth: 32)
+        }
+
+        mutating func controlledIterate(depth: Int) -> Segment? {
+            guard depth >= 0 else { return nil }
+
             let nextIndex = makeNextIndex()
 
             guard nextIndex != code.endIndex else {
@@ -75,11 +81,12 @@ private extension Tokenizer {
             case .token, .delimiter:
                 guard var segment = segments.current else {
                     segments.current = makeSegment(with: component, at: nextIndex)
-                    return next()
+                    return controlledIterate(depth: depth - 1)
                 }
 
                 guard segment.trailingWhitespace == nil,
-                      component.isDelimiter == segment.currentTokenIsDelimiter else {
+                      component.isDelimiter == segment.currentTokenIsDelimiter
+                else {
                     return finish(segment, with: component, at: nextIndex)
                 }
 
@@ -95,14 +102,14 @@ private extension Tokenizer {
 
                 segment.tokens.current.append(component.character)
                 segments.current = segment
-                return next()
+                return controlledIterate(depth: depth - 1)
             case .whitespace, .newline:
                 guard var segment = segments.current else {
                     var segment = makeSegment(with: component, at: nextIndex)
                     segment.trailingWhitespace = component.token
                     segment.isLastOnLine = component.isNewline
                     segments.current = segment
-                    return next()
+                    return controlledIterate(depth: depth - 1)
                 }
 
                 if var existingWhitespace = segment.trailingWhitespace {
@@ -117,7 +124,7 @@ private extension Tokenizer {
                 }
 
                 segments.current = segment
-                return next()
+                return controlledIterate(depth: depth - 1)
             }
         }
 
